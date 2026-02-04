@@ -9,8 +9,7 @@ services:
       MONGO_INITDB_DATABASE: smart_leave_management
     volumes:
       - mongo_data:/data/db
-    ports:
-      - "27017:27017"
+    # Mongo is NOT exposed publicly (secure by default)
 
   api:
     build: .
@@ -19,11 +18,11 @@ services:
     depends_on:
       - mongo
     environment:
-      PORT: 8080
+      PORT: 8081
       MONGO_URI: mongodb://mongo:27017/smart_leave_management
       JWT_SECRET: supersecretkey
     ports:
-      - "8080:8080"
+      - "8081:8081"
 
 volumes:
   mongo_data:

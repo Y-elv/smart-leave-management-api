@@ -16,7 +16,7 @@ export const connectDb = async () => {
       autoIndex: true,
     });
     // Basic startup log for visibility in development
-    console.log("Connected to Databse");
+    console.log("Connected to Database");
   } catch (err) {
     console.error("Failed to connect to MongoDB", err);
     throw err;

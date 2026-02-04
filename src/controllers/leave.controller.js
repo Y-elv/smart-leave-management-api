@@ -1,5 +1,24 @@
-import LeaveRequest, { LEAVE_STATUS } from '../models/LeaveRequest.js';
-import { calculateLeaveDays, ensureYearlyLeaveReset } from '../utils/leave.js';
+import LeaveRequest, { LEAVE_STATUS } from "../models/LeaveRequest.js";
+import { calculateLeaveDays, ensureYearlyLeaveReset } from "../utils/leave.js";
+
+/** Check if [start, end] overlaps any approved/pending leave for the user. */
+async function hasOverlappingLeave(
+  userId,
+  startDate,
+  endDate,
+  excludeLeaveId = null
+) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const query = {
+    requester: userId,
+    status: { $in: [LEAVE_STATUS.PENDING, LEAVE_STATUS.APPROVED] },
+    $or: [{ startDate: { $lte: end }, endDate: { $gte: start } }],
+  };
+  if (excludeLeaveId) query._id = { $ne: excludeLeaveId };
+  const overlap = await LeaveRequest.findOne(query);
+  return !!overlap;
+}
 
 /**
  * STAFF: Create a new leave request.
@@ -16,7 +35,7 @@ export const createLeaveRequest = async (req, res, next) => {
 
     if (!startDate || !endDate) {
       return res.status(400).json({
-        message: 'startDate and endDate are required.',
+        message: "startDate and endDate are required.",
       });
     }
 
@@ -34,11 +53,23 @@ export const createLeaveRequest = async (req, res, next) => {
 
     if (days > req.user.leaveBalance) {
       return res.status(400).json({
-        message: 'Insufficient leave balance for this request.',
+        message: "Insufficient leave balance for this request.",
         details: {
           available: req.user.leaveBalance,
           requested: days,
         },
+      });
+    }
+
+    const overlapping = await hasOverlappingLeave(
+      req.user._id,
+      startDate,
+      endDate
+    );
+    if (overlapping) {
+      return res.status(400).json({
+        message:
+          "Overlapping leave dates. You already have a pending or approved leave in this period.",
       });
     }
 
@@ -87,30 +118,30 @@ export const approveLeave = async (req, res, next) => {
     const leave = await LeaveRequest.findById(id);
     if (!leave) {
       return res.status(404).json({
-        message: 'Leave request not found.',
+        message: "Leave request not found.",
       });
     }
 
     if (leave.status === LEAVE_STATUS.APPROVED) {
       return res.status(400).json({
-        message: 'This leave request has already been approved.',
+        message: "This leave request has already been approved.",
       });
     }
 
     if (leave.status === LEAVE_STATUS.REJECTED) {
       return res.status(400).json({
-        message: 'Rejected leave requests cannot be approved.',
+        message: "Rejected leave requests cannot be approved.",
       });
     }
 
     // Load the requester and make sure their yearly balance is current.
-    const requester = await (await import('../models/User.js')).default.findById(
-      leave.requester
-    );
+    const requester = await (
+      await import("../models/User.js")
+    ).default.findById(leave.requester);
 
     if (!requester) {
       return res.status(400).json({
-        message: 'User associated with this leave request no longer exists.',
+        message: "User associated with this leave request no longer exists.",
       });
     }
 
@@ -119,7 +150,7 @@ export const approveLeave = async (req, res, next) => {
     if (leave.days > requester.leaveBalance) {
       return res.status(400).json({
         message:
-          'Insufficient leave balance to approve this request. Balance may have changed since submission.',
+          "Insufficient leave balance to approve this request. Balance may have changed since submission.",
         details: {
           available: requester.leaveBalance,
           requested: leave.days,
@@ -131,7 +162,7 @@ export const approveLeave = async (req, res, next) => {
 
     if (requester.leaveBalance < 0) {
       return res.status(400).json({
-        message: 'Approval would result in a negative leave balance.',
+        message: "Approval would result in a negative leave balance.",
       });
     }
 
@@ -161,13 +192,13 @@ export const rejectLeave = async (req, res, next) => {
     const leave = await LeaveRequest.findById(id);
     if (!leave) {
       return res.status(404).json({
-        message: 'Leave request not found.',
+        message: "Leave request not found.",
       });
     }
 
     if (leave.status !== LEAVE_STATUS.PENDING) {
       return res.status(400).json({
-        message: 'Only pending leave requests can be rejected.',
+        message: "Only pending leave requests can be rejected.",
       });
     }
 
@@ -183,10 +214,41 @@ export const rejectLeave = async (req, res, next) => {
   }
 };
 
+/**
+ * MANAGER/ADMIN: Get all pending leave requests.
+ */
+export const getPendingLeaves = async (req, res, next) => {
+  try {
+    const leaves = await LeaveRequest.find({ status: LEAVE_STATUS.PENDING })
+      .populate("requester", "fullName email role")
+      .sort({ createdAt: -1 })
+      .lean();
+    return res.status(200).json(leaves);
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * ADMIN: Get all leave requests.
+ */
+export const getAllLeaves = async (req, res, next) => {
+  try {
+    const leaves = await LeaveRequest.find()
+      .populate("requester", "fullName email role")
+      .sort({ createdAt: -1 })
+      .lean();
+    return res.status(200).json(leaves);
+  } catch (err) {
+    next(err);
+  }
+};
+
 export default {
   createLeaveRequest,
   getMyLeaves,
   approveLeave,
   rejectLeave,
+  getPendingLeaves,
+  getAllLeaves,
 };
-
