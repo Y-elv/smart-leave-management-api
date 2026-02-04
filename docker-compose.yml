@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: smart-leave-mongo
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: smart_leave_management
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017"
+
+  api:
+    build: .
+    container_name: smart-leave-api
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    environment:
+      PORT: 8080
+      MONGO_URI: mongodb://mongo:27017/smart_leave_management
+      JWT_SECRET: supersecretkey
+    ports:
+      - "8080:8080"
+
+volumes:
+  mongo_data:
