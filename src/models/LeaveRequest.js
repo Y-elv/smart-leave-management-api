@@ -37,6 +37,10 @@ const leaveRequestSchema = new Schema(
       enum: Object.values(LEAVE_STATUS),
       default: LEAVE_STATUS.PENDING,
     },
+    documentUrl: {
+      type: String,
+      default: null,
+    },
     approvedBy: {
       type: Schema.Types.ObjectId,
       ref: 'User',

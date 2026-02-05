@@ -1,5 +1,19 @@
+import { v2 as cloudinary } from 'cloudinary';
+import { promisify } from 'util';
+import fs from 'fs';
+import path from 'path';
 import LeaveRequest, { LEAVE_STATUS } from "../models/LeaveRequest.js";
 import { calculateLeaveDays, ensureYearlyLeaveReset } from "../utils/leave.js";
+
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const uploadFile = promisify(cloudinary.uploader.upload);
+const unlinkFile = promisify(fs.unlink);
 
 /** Check if [start, end] overlaps any approved/pending leave for the user. */
 async function hasOverlappingLeave(
@@ -31,7 +45,8 @@ async function hasOverlappingLeave(
  */
 export const createLeaveRequest = async (req, res, next) => {
   try {
-    const { startDate, endDate, reason } = req.body || {};
+    const { startDate, endDate, reason } = req.body;
+    const file = req.file; // Added for file upload
 
     if (!startDate || !endDate) {
       return res.status(400).json({
@@ -73,14 +88,38 @@ export const createLeaveRequest = async (req, res, next) => {
       });
     }
 
-    const leaveRequest = await LeaveRequest.create({
+    let documentUrl = null;
+    
+    // Handle file upload if exists
+    if (file) {
+      try {
+        // Upload file to Cloudinary
+        const result = await uploadFile(file.path, {
+          folder: 'leave-documents',
+          resource_type: 'auto',
+          public_id: `leave-${Date.now()}`,
+        });
+        documentUrl = result.secure_url;
+        
+        // Delete the temp file
+        await unlinkFile(file.path);
+      } catch (uploadError) {
+        console.error('Error uploading document:', uploadError);
+        // If file upload fails, we still proceed with the leave request
+      }
+    }
+
+    const leaveRequest = new LeaveRequest({
       requester: req.user._id,
       startDate,
       endDate,
       days,
       reason,
+      documentUrl, // Add the document URL if uploaded
       status: LEAVE_STATUS.PENDING,
     });
+
+    await leaveRequest.save();
 
     return res.status(201).json(leaveRequest);
   } catch (err) {
@@ -167,7 +206,7 @@ export const approveLeave = async (req, res, next) => {
     }
 
     leave.status = LEAVE_STATUS.APPROVED;
-    leave.approvedBy = req.user._id;
+    leave.approvedBy = req.user.id === 'super-admin' ? 'super-admin' : req.user.id;
     leave.decisionAt = new Date();
 
     await requester.save();
@@ -203,7 +242,7 @@ export const rejectLeave = async (req, res, next) => {
     }
 
     leave.status = LEAVE_STATUS.REJECTED;
-    leave.approvedBy = req.user._id;
+    leave.approvedBy = req.user.id === 'super-admin' ? 'super-admin' : req.user.id;
     leave.decisionAt = new Date();
 
     await leave.save();

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import multer from 'multer';
 import {
   createLeaveRequest,
   getMyLeaves,
@@ -12,18 +13,42 @@ import { authorizeRoles, USER_ROLES } from "../middleware/role.middleware.js";
 
 const router = Router();
 
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
+
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF, JPG, PNG, and DOC/DOCX files are allowed.'));
+    }
+  },
+});
+
 /**
  * @swagger
  * /api/leaves:
  *   post:
- *     summary: Create a leave request (STAFF only)
+ *     summary: Create a leave request with optional document (STAFF only)
  *     description: >
- *       Submit a new leave request. The system will:
+ *       Submit a new leave request with an optional document attachment. The system will:
  *       - Calculate the number of days (inclusive of start and end dates)
  *       - Ensure yearly leave reset is applied
  *       - Validate that the user has sufficient leave balance
  *       - Reject the request if balance is insufficient
  *       - Create the request with PENDING status (balance is NOT deducted yet)
+ *       - Upload the document to Cloudinary if provided
  *     tags:
  *       - Leave Requests
  *     security:
@@ -31,9 +56,32 @@ const router = Router();
  *     requestBody:
  *       required: true
  *       content:
- *         application/json:
+ *         multipart/form-data:
  *           schema:
- *             $ref: '#/components/schemas/CreateLeaveRequest'
+ *             type: object
+ *             required:
+ *               - startDate
+ *               - endDate
+ *               - reason
+ *             properties:
+ *               startDate:
+ *                 type: string
+ *                 format: date
+ *                 description: Start date of leave (YYYY-MM-DD)
+ *                 example: "2026-03-01"
+ *               endDate:
+ *                 type: string
+ *                 format: date
+ *                 description: End date of leave (YYYY-MM-DD)
+ *                 example: "2026-03-05"
+ *               reason:
+ *                 type: string
+ *                 description: Reason for leave
+ *                 example: "Family vacation"
+ *               document:
+ *                 type: string
+ *                 format: binary
+ *                 description: Optional document to attach (PDF, JPG, PNG, DOC, DOCX, max 5MB)
  *     responses:
  *       201:
  *         description: Leave request created successfully
@@ -42,7 +90,7 @@ const router = Router();
  *             schema:
  *               $ref: '#/components/schemas/LeaveRequest'
  *       400:
- *         description: Invalid dates or insufficient leave balance
+ *         description: Invalid dates, insufficient leave balance, or invalid file
  *         content:
  *           application/json:
  *             schema:
@@ -56,12 +104,14 @@ router.post(
   "/",
   authenticate,
   authorizeRoles(USER_ROLES.STAFF),
+  upload.single('document'),
   createLeaveRequest
 );
 router.post(
   "/request",
   authenticate,
   authorizeRoles(USER_ROLES.STAFF),
+  upload.single('document'),
   createLeaveRequest
 );
 
