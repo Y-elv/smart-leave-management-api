@@ -12,14 +12,16 @@ const server = http.createServer(app);
 
 const start = async () => {
   try {
+    console.log("[server] Starting...");
     await connectDb();
+    console.log("[server] Database ready, scheduling yearly leave reset");
     scheduleYearlyReset();
 
     server.listen(PORT, () => {
-      console.log(`API server listening on port ${PORT}`);
+      console.log(`[server] API listening on port ${PORT}`);
     });
   } catch (err) {
-    console.error("Failed to start server:", err);
+    console.error("[server] Failed to start", err.message);
     process.exit(1);
   }
 };

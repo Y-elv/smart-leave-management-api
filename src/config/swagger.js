@@ -1,7 +1,18 @@
 import swaggerJsdoc from "swagger-jsdoc";
-import { env } from "./env.js";
 
-const options = {
+/**
+ * Server URLs read at request time so PRODUCTION_URL / LOCAL_URL from .env are used
+ * (env is loaded after some modules in ESM, so we read process.env when building the spec).
+ */
+function getServerUrls() {
+  const local = (process.env.LOCAL_URL || "http://localhost:8081").trim();
+  const production = (
+    process.env.PRODUCTION_URL || "https://leave-management-api.onrender.com"
+  ).trim();
+  return { local, production };
+}
+
+const optionsBase = {
   definition: {
     openapi: "3.0.0",
     info: {
@@ -35,12 +46,9 @@ const options = {
       },
     },
     servers: [
+      { url: "http://localhost:8081", description: "Local Development Server" },
       {
-        url: env.BASE_URLS.local,
-        description: "Local Development Server",
-      },
-      {
-        url: env.BASE_URLS.production,
+        url: "https://leave-management-api.onrender.com",
         description: "Production Server",
       },
     ],
@@ -310,6 +318,21 @@ const options = {
   apis: ["./src/routes/*.js", "./src/controllers/*.js"],
 };
 
-const swaggerSpec = swaggerJsdoc(options);
-
-export default swaggerSpec;
+/**
+ * Build the OpenAPI spec with server URLs from process.env (read at call time).
+ * Use when serving /api/docs.json so PRODUCTION_URL / LOCAL_URL from .env are applied.
+ */
+export function getSwaggerSpec() {
+  const { local, production } = getServerUrls();
+  const options = {
+    ...optionsBase,
+    definition: {
+      ...optionsBase.definition,
+      servers: [
+        { url: local, description: "Local Development Server" },
+        { url: production, description: "Production Server" },
+      ],
+    },
+  };
+  return swaggerJsdoc(options);
+}

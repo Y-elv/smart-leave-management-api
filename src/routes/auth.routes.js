@@ -69,6 +69,13 @@ router.post("/login", login);
  *       401:
  *         description: Invalid credentials
  */
-router.post("/admin/login", adminLogin);
+router.post(
+  "/admin/login",
+  (req, _res, next) => {
+    console.log("[auth] POST /admin/login received");
+    next();
+  },
+  adminLogin
+);
 
 export default router;

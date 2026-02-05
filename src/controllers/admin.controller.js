@@ -15,15 +15,25 @@ const JWT_ADMIN_EXPIRY = "8h";
  * Env vars are read at request time so they are available after dotenv.config().
  */
 export async function adminLogin(req, res, next) {
+  const log = (msg, meta = "") =>
+    console.log(`[admin/login] ${msg}`, meta || "");
   try {
+    log("request received");
     const superAdminEmail = (process.env.SUPER_ADMIN_EMAIL || "").trim();
     const superAdminPassword = (process.env.SUPER_ADMIN_PASSWORD || "").trim();
     const superAdminName = (
       process.env.SUPER_ADMIN_NAME || "Super Admin"
     ).trim();
 
+    const hasConfig = !!(superAdminEmail && superAdminPassword);
+    log(
+      "env check",
+      `configured=${hasConfig} email=${superAdminEmail ? "set" : "missing"}`
+    );
+
     const { email, password } = req.body || {};
     if (!email || !password) {
+      log("response 400 missing email or password");
       return res.status(400).json({
         message: "Email and password are required.",
       });
@@ -32,18 +42,22 @@ export async function adminLogin(req, res, next) {
     const pass = password != null ? String(password).trim() : "";
 
     if (!superAdminEmail || !superAdminPassword) {
+      log("response 503 super admin not configured");
       return res.status(503).json({
         message:
           "Super admin login is not configured. Set SUPER_ADMIN_EMAIL and SUPER_ADMIN_PASSWORD in .env.",
       });
     }
     if (normalized !== superAdminEmail.toLowerCase()) {
+      log("response 401 email mismatch");
       return res.status(401).json({ message: "Invalid credentials." });
     }
     if (pass !== superAdminPassword) {
+      log("response 401 password mismatch");
       return res.status(401).json({ message: "Invalid credentials." });
     }
 
+    log("issuing token");
     const token = signToken(
       {
         id: "super-admin",
@@ -53,6 +67,7 @@ export async function adminLogin(req, res, next) {
       { expiresIn: JWT_ADMIN_EXPIRY }
     );
 
+    log("response 200 success");
     return res.status(200).json({
       token,
       user: {
@@ -68,6 +83,7 @@ export async function adminLogin(req, res, next) {
       },
     });
   } catch (err) {
+    console.error("[admin/login] error", err.message, err.stack);
     next(err);
   }
 }
