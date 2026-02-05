@@ -1,5 +1,9 @@
 import { Router } from "express";
-import { createUser, getAllUsers } from "../controllers/user.controller.js";
+import {
+  createUser,
+  getAllUsers,
+  getMe,
+} from "../controllers/user.controller.js";
 import authenticate from "../middleware/auth.middleware.js";
 import { authorizeRoles, USER_ROLES } from "../middleware/role.middleware.js";
 
@@ -69,5 +73,29 @@ router.post("/", authenticate, authorizeRoles(USER_ROLES.ADMIN), createUser);
  *         description: Insufficient permissions (ADMIN only)
  */
 router.get("/", authenticate, authorizeRoles(USER_ROLES.ADMIN), getAllUsers);
+
+/**
+ * @swagger
+ * /api/users/me:
+ *   get:
+ *     summary: Get current authenticated user
+ *     description: >
+ *       Returns the profile of the currently authenticated user (ADMIN, MANAGER, or STAFF),
+ *       including leave balance fields. Also works for the bootstrap super admin.
+ *     tags:
+ *       - Users
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Current user
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Authentication required
+ */
+router.get("/me", authenticate, getMe);
 
 export default router;
